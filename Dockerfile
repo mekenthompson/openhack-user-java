@@ -1,32 +1,20 @@
-FROM golang:1.11.1 AS gobuild
+# First stage to build the application
+FROM maven:3.5.4-jdk-11-slim AS build-env
+ADD ./pom.xml pom.xml
+ADD ./src src/
+RUN mvn clean package
 
-WORKDIR /go/src/github.com/Azure-Samples/openhack-devops-team/apis/trips
+# build runtime image
+FROM openjdk:11-jre-slim
 
-COPY . .
-
-ENV GO111MODULE=on
-
-RUN go get
-
-RUN CGO_ENABLED=0 GOOS=linux go build -o main .
-
-FROM alpine:3.8 AS gorun
+EXPOSE 8080
 
 ENV SQL_USER="YourUserName" \
 SQL_PASSWORD="changeme" \
 SQL_SERVER="changeme.database.windows.net" \
-SQL_DBNAME="mydrivingDB" \
-WEB_PORT="80" \
-WEB_SERVER_BASE_URI="http://0.0.0.0" \
-DOCS_URI="http://localhost" \
-DEBUG_LOGGING="false"
+SQL_DBNAME="mydrivingDB"
 
-WORKDIR /app
+# Add the application's jar to the container
+COPY --from=build-env target/swagger-spring-1.0.0.jar user-java.jar
 
-RUN apk add --update \
-  ca-certificates
-
-COPY --from=gobuild /go/src/github.com/Azure-Samples/openhack-devops-team/apis/trips/main .
-COPY --from=gobuild /go/src/github.com/Azure-Samples/openhack-devops-team/apis/trips/api ./api/
-
-CMD ["./main"]
+ENTRYPOINT ["java","-Djava.security.egd=file:/dev/./urandom","-jar","/user-java.jar"]
